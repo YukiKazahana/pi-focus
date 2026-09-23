@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
-import { initTheme, ToolExecutionComponent, type ExtensionAPI, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { ExtensionRunner, initTheme, ToolExecutionComponent, type ExtensionAPI, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { visibleWidth, type Component } from "@earendil-works/pi-tui";
 import focus from "./index.ts";
 
@@ -12,6 +12,7 @@ const handlers = new Map<string, Function>();
 const tools = new Map<string, ToolDefinition<any, any, any>>();
 const commands = new Map<string, any>();
 const entries: any[] = [];
+const historicalRows: ToolExecutionComponent[] = [];
 let widget: Component | undefined;
 let expanded = true;
 let active = ["read", "bash", "edit", "write", "ffgrep"];
@@ -22,7 +23,10 @@ const ctx: any = {
   sessionManager: { getBranch: () => entries, getSessionId: () => "focus-test", getSessionFile: () => undefined },
   ui: {
     getToolsExpanded: () => expanded,
-    setToolsExpanded: (value: boolean) => { expanded = value; },
+    setToolsExpanded: (value: boolean) => {
+      expanded = value;
+      for (const row of historicalRows) row.setExpanded(value);
+    },
     setWidget: (_key: string, factory: any) => { widget = factory?.({}, theme); },
     notify() {},
   },
@@ -48,9 +52,10 @@ const renderContext: any = {
 
 try {
   focus(api as ExtensionAPI);
+  assert.equal(tools.size, 4, "renderers must exist before session_start");
   mode = "rpc";
   await emit("session_start");
-  assert.equal(tools.size, 0, "non-TUI must not replace tools");
+  assert.equal(widget, undefined, "non-TUI must not display a widget");
   mode = "tui";
   await emit("session_start");
   assert.equal(tools.size, 4);
@@ -136,13 +141,32 @@ try {
   assert.equal(widget, undefined);
   assert.equal(expanded, true);
 
-  // A third-party read override must never be replaced.
-  tools.clear();
-  api.getAllTools = () => [{ name: "read", sourceInfo: { source: "package" } }];
-  await emit("session_start");
-  assert.equal(tools.size, 0);
-  await emit("session_shutdown");
-  console.log("PASS: real tool execution, native rendering/expansion, errors, cancellation, parallel progress, settings, conflict and non-TUI guards");
+  // Match /reload ordering: create a new extension, restore rows, then session_start.
+  for (const enabled of [true, false]) {
+    entries.push({ type: "custom", customType: "pi-focus", data: { enabled } });
+    tools.clear();
+    focus(api as ExtensionAPI);
+    const historical = new ToolExecutionComponent("read", "history", { path: file },
+      { showImages: false }, tools.get("read"), { requestRender() {} } as any, temp);
+    historical.updateResult({ ...result, isError: false });
+    historicalRows.push(historical);
+    await emit("session_start", { reason: "reload" });
+    const output = stripVTControlCharacters(historical.render(100).join("\n"));
+    assert.equal(output.includes("80 行输出"), enabled, "restored rows must follow the saved focus mode");
+    assert.equal(Boolean(widget), enabled);
+    await emit("session_shutdown");
+    historicalRows.length = 0;
+  }
+
+  // Pi's first registration wins: earlier third-party overrides remain intact.
+  const thirdParty = { ...tools.get("read")!, execute: async () => ({ content: [], details: undefined }) };
+  const runner = new ExtensionRunner([
+    { tools: new Map([["read", { definition: thirdParty }]]) },
+    { tools: new Map([...tools].map(([name, definition]) => [name, { definition }])) },
+  ] as any, {} as any, temp, ctx.sessionManager, {} as any);
+  assert.equal(runner.getAllRegisteredTools().find(tool => tool.definition.name === "read")?.definition, thirdParty);
+  assert.equal(runner.getToolDefinition("read"), thirdParty);
+  console.log("PASS: real tools, rendering, reload history on/off, errors, cancellation, parallel progress, settings, and extension precedence");
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

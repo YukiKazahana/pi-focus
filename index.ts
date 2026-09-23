@@ -104,7 +104,26 @@ export default function focusExtension(pi: ExtensionAPI) {
     };
   }
 
+  // Register renderers before Pi reconstructs historical tool rows on reload.
+  // Execution uses trusted session settings once session_start supplies a context.
+  let originals: ToolDefinition<any, any, any>[] = [
+    createReadToolDefinition(process.cwd()), createBashToolDefinition(process.cwd()),
+    createEditToolDefinition(process.cwd()), createWriteToolDefinition(process.cwd()),
+  ];
+  for (const original of originals) {
+    pi.registerTool({
+      ...compact(original),
+      execute: (...args) => originals.find(tool => tool.name === original.name)!.execute(...args),
+    });
+  }
+
   pi.on("session_start", (_event, ctx) => {
+    const settings = SettingsManager.create(ctx.cwd, undefined, { projectTrusted: ctx.isProjectTrusted() });
+    originals = [
+      createReadToolDefinition(ctx.cwd, { autoResizeImages: settings.getImageAutoResize() }),
+      createBashToolDefinition(ctx.cwd, { shellPath: settings.getShellPath(), commandPrefix: settings.getShellCommandPrefix() }),
+      createEditToolDefinition(ctx.cwd), createWriteToolDefinition(ctx.cwd),
+    ];
     if (ctx.mode !== "tui") return;
     enabled = true;
     for (const entry of ctx.sessionManager.getBranch()) {
@@ -117,19 +136,6 @@ export default function focusExtension(pi: ExtensionAPI) {
     completed = failures = 0;
     lastFailure = lastFile = "";
     phase = "就绪";
-    // Register after discovery so tools owned by other extensions/SDKs are left intact.
-    const builtin = new Set(pi.getAllTools().filter(t => t.sourceInfo.source === "builtin").map(t => t.name));
-    const active = pi.getActiveTools();
-    const settings = SettingsManager.create(ctx.cwd, undefined, { projectTrusted: ctx.isProjectTrusted() });
-    const definitions = [
-      createReadToolDefinition(ctx.cwd, { autoResizeImages: settings.getImageAutoResize() }),
-      createBashToolDefinition(ctx.cwd, { shellPath: settings.getShellPath(), commandPrefix: settings.getShellCommandPrefix() }),
-      createEditToolDefinition(ctx.cwd), createWriteToolDefinition(ctx.cwd),
-    ];
-    for (const definition of definitions) {
-      if (builtin.has(definition.name)) pi.registerTool(compact(definition));
-    }
-    pi.setActiveTools(active);
     apply(ctx);
   });
 

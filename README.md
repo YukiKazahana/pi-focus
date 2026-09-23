@@ -75,7 +75,7 @@ The extension has no third-party runtime dependencies. It uses Node.js and Pi's 
 
 Validated against Pi `0.87.1`. Development checks require Node.js 22.6 or later. Status labels and tool summaries are currently displayed in Chinese.
 
-- Only affects the terminal UI. RPC, JSON, and print modes do not replace tools or display the widget.
-- Third-party tools keep their own renderers and participate in progress tracking. Built-in tools already overridden by another extension are left intact.
-- Compact renderers are registered at session startup. Historical tool rows already restored by Pi retain their original rendering; new calls use compact rendering.
+- Only changes presentation in the terminal UI. RPC, JSON, and print modes use the same delegated native tool execution without displaying the widget.
+- Third-party tools with other names keep their own renderers and participate in progress tracking. If another extension overrides `read`, `bash`, `edit`, or `write`, load it before pi-focus: Pi uses the first extension registration for each tool name.
+- Compact renderers are registered before Pi reconstructs history. Reloading or resuming a session restores historical tool rows according to the saved focus mode.
 - Assistant messages, thinking blocks, images, and confirmation dialogs keep Pi's existing behavior. Use `Ctrl+T` to toggle thinking blocks separately.
