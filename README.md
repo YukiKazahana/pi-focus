@@ -38,11 +38,11 @@ Focus mode is enabled by default.
 | --- | --- |
 | `/focus` | Toggle focus mode. |
 | `/focus on` | Enable compact output and the progress widget. |
-| `/focus off` | Restore native tool content rendering and the previous expansion state. |
+| `/focus off` | Show native tool output and expand existing and subsequent tool rows. |
 
 Use Pi's tool expansion shortcut, `Ctrl+O` by default, to inspect details. In fullscreen mode, tool rows also support click-to-expand.
 
-The mode is saved in the current session branch and restored when resuming or reloading. Turning it off removes the widget and restores native tool content rendering.
+The mode is saved in the current session branch and restored when resuming or reloading. Turning it off removes the widget and expands historical tool output as well as new output. You can still use `Ctrl+O` to collapse it afterward.
 
 ## Development
 

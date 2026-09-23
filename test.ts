@@ -14,7 +14,7 @@ const commands = new Map<string, any>();
 const entries: any[] = [];
 const historicalRows: ToolExecutionComponent[] = [];
 let widget: Component | undefined;
-let expanded = true;
+let expanded = false;
 let active = ["read", "bash", "edit", "write", "ffgrep"];
 let mode = "tui";
 const theme: any = { fg: (_color: string, text: string) => text, bold: (text: string) => text };
@@ -24,6 +24,7 @@ const ctx: any = {
   ui: {
     getToolsExpanded: () => expanded,
     setToolsExpanded: (value: boolean) => {
+      if (expanded === value) return;
       expanded = value;
       for (const row of historicalRows) row.setExpanded(value);
     },
@@ -124,9 +125,13 @@ try {
   await emit("agent_settled");
   assert.match(widgetText(), /已中止/);
   assert.match(widgetText(), /失败 1/);
+  historicalRows.push(row);
+  row.setExpanded(expanded);
   await commands.get("focus").handler("off", ctx);
   assert.equal(widget, undefined);
-  assert.equal(expanded, true, "restore pre-focus expansion state");
+  assert.equal(expanded, true, "off expands historical tool output even when focus started collapsed");
+  assert.match(stripVTControlCharacters(row.render(100).join("\n")), /line 79/);
+  historicalRows.length = 0;
   row.setExpanded(false);
   assert.doesNotMatch(stripVTControlCharacters(row.render(100).join("\n")), /✓|80 行输出/);
   row.setExpanded(true);
@@ -149,6 +154,7 @@ try {
     const historical = new ToolExecutionComponent("read", "history", { path: file },
       { showImages: false }, tools.get("read"), { requestRender() {} } as any, temp);
     historical.updateResult({ ...result, isError: false });
+    historical.setExpanded(expanded);
     historicalRows.push(historical);
     await emit("session_start", { reason: "reload" });
     const output = stripVTControlCharacters(historical.render(100).join("\n"));

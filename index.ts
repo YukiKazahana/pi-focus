@@ -53,8 +53,8 @@ export default function focusExtension(pi: ExtensionAPI) {
       previousExpanded ??= ctx.ui.getToolsExpanded();
       ctx.ui.setToolsExpanded(false);
     } else {
-      // Also invalidates existing tool rows so their native renderers return.
-      ctx.ui.setToolsExpanded(previousExpanded ?? ctx.ui.getToolsExpanded());
+      // Expanding also refreshes historical rows through their native renderers.
+      ctx.ui.setToolsExpanded(true);
       previousExpanded = undefined;
     }
     paint(ctx);
