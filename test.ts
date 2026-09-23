@@ -78,8 +78,12 @@ try {
   // Exercise the real Pi tool component, including expansion and native fallback.
   initTheme("dark");
   const row = new ToolExecutionComponent("read", "r", { path: file }, { showImages: false }, read, { requestRender() {} } as any, temp);
+  assert.match(row.render(80).join("\n"), /\x1b\[48;/, "pending tool background");
+  row.updateResult({ ...result, isError: true });
+  assert.match(row.render(80).join("\n"), /\x1b\[48;/, "failed tool background");
   row.updateResult({ ...result, isError: false });
-  assert.ok(row.render(80).length <= 4);
+  assert.match(row.render(80).join("\n"), /\x1b\[48;/, "successful tool background");
+  assert.ok(row.render(80).length <= 5);
   row.setExpanded(true);
   assert.match(stripVTControlCharacters(row.render(100).join("\n")), /line 79/);
 

@@ -63,7 +63,7 @@ export default function focusExtension(pi: ExtensionAPI) {
   function compact(original: ToolDefinition<any, any, any>): ToolDefinition<any, any, any> {
     return {
       ...original,
-      renderShell: "self",
+      renderShell: "default",
       renderCall(args, theme, context) {
         if (!enabled || context.expanded) {
           return original.renderCall?.(args, theme, context) ?? new Text(original.name, 0, 0);

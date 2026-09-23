@@ -5,6 +5,7 @@ A Pi extension that keeps tool output compact and shows execution progress above
 ## Behavior
 
 - Shows compact call and result summaries for `read`, `bash`, `edit`, and `write`, hiding streaming output while a tool runs.
+- Keeps Pi's theme-aware tool backgrounds for pending, successful, and failed calls.
 - Shows a short error excerpt when a tool fails.
 - Updates a persistent widget with running tools, completed calls, failure count, the latest failure, and the most recently modified file.
 - Tracks parallel tool calls separately and clears running indicators when the agent settles or is aborted.
@@ -41,7 +42,7 @@ Focus mode is enabled by default.
 
 Use Pi's tool expansion shortcut, `Ctrl+O` by default, to inspect details. In fullscreen mode, tool rows also support click-to-expand.
 
-The mode is saved in the current session branch and restored when resuming or reloading. Turning it off removes the widget; tool rows retain their borderless layout.
+The mode is saved in the current session branch and restored when resuming or reloading. Turning it off removes the widget and restores native tool content rendering.
 
 ## Development
 
