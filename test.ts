@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -33,6 +34,7 @@ const ctx: any = {
   },
 };
 const api: any = {
+  events: new EventEmitter(),
   on: (name: string, handler: Function) => handlers.set(name, handler),
   registerCommand: (name: string, command: any) => commands.set(name, command),
   registerTool: (tool: ToolDefinition<any, any, any>) => tools.set(tool.name, tool),
@@ -121,6 +123,33 @@ try {
   abort.abort();
   await assert.rejects(read.execute("cancel", { path: file }, abort.signal, undefined, ctx), /abort/i);
 
+  // Coordinator pauses are not user aborts; only its actual continuation preserves totals.
+  api.events.emit("pi-compact-coordinator:pause", "other-session");
+  assert.doesNotMatch(widgetText(), /准备压缩/);
+  api.events.emit("pi-compact-coordinator:pause", "focus-test");
+  await emit("agent_before_settle", { outcome: "aborted" });
+  await emit("agent_settled");
+  assert.match(widgetText(), /准备压缩/);
+  assert.doesNotMatch(widgetText(), /已中止/);
+  await emit("session_before_compact");
+  assert.match(widgetText(), /压缩中/);
+  await emit("session_compact");
+  assert.match(widgetText(), /压缩完成/);
+  api.events.emit("pi-compact-coordinator:resume", "focus-test");
+  await emit("agent_start");
+  assert.match(widgetText(), /已执行 3 · 失败 1/);
+  assert.match(widgetText(), /search failed/);
+  assert.match(widgetText(), /最近修改/);
+  assert.doesNotMatch(widgetText(), /压缩|恢复执行/);
+
+  // Failed compaction can still be followed by an explicit coordinator continuation.
+  await emit("session_before_compact");
+  await emit("session_compact_failed", { aborted: false });
+  assert.match(widgetText(), /压缩失败/);
+  api.events.emit("pi-compact-coordinator:resume", "focus-test");
+  await emit("agent_start");
+  assert.match(widgetText(), /已执行 3 · 失败 1/);
+
   await emit("agent_before_settle", { outcome: "aborted" });
   await emit("agent_settled");
   assert.match(widgetText(), /已中止/);
@@ -142,14 +171,30 @@ try {
   await emit("agent_start");
   assert.match(widgetText(), /已执行 0 · 失败 0/);
   assert.doesNotMatch(widgetText(), /search failed/);
+  // Cancellation and new user input must not leak continuation state into a new task.
+  for (const interrupt of ["cancel", "input"]) {
+    await emit("tool_execution_end", { toolName: "read", toolCallId: "extra", result, isError: false });
+    api.events.emit("pi-compact-coordinator:resume", "focus-test");
+    if (interrupt === "cancel") {
+      await emit("session_compact_failed", { aborted: true });
+      assert.match(widgetText(), /压缩已取消/);
+    } else {
+      await emit("input", { source: "interactive" });
+    }
+    await emit("agent_start");
+    assert.match(widgetText(), /已执行 0 · 失败 0/);
+  }
   await emit("session_shutdown");
   assert.equal(widget, undefined);
+  api.events.emit("pi-compact-coordinator:resume", "focus-test");
+  assert.equal(widget, undefined, "shutdown detaches the session context");
   assert.equal(expanded, true);
 
   // Match /reload ordering: create a new extension, restore rows, then session_start.
   for (const enabled of [true, false]) {
     entries.push({ type: "custom", customType: "pi-focus", data: { enabled } });
     tools.clear();
+    api.events.removeAllListeners();
     focus(api as ExtensionAPI);
     const historical = new ToolExecutionComponent("read", "history", { path: file },
       { showImages: false }, tools.get("read"), { requestRender() {} } as any, temp);

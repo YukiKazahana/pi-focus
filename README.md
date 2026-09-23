@@ -10,6 +10,7 @@ A Pi extension that keeps tool output compact and shows execution progress above
 - Updates a persistent widget with running tools, completed calls, failure count, the latest failure, and the most recently modified file.
 - Tracks parallel tool calls separately and clears running indicators when the agent settles or is aborted.
 - Keeps the last run's status visible until the next run starts. Counts reset when starting a new run, switching sessions, or reloading.
+- Preserves counts, the latest tool failure, and the most recently modified file across automatic continuations from `pi-compact-coordinator`. Shows compaction progress instead of reporting the coordinator's pause as a user abort.
 - Preserves tool execution, model context, and session history without making additional model calls.
 
 The failure count records failed calls during the run, including failures that the agent later recovers from.
@@ -69,6 +70,14 @@ npm test
 
 Tests exercise real file and shell operations, native tool rendering, expansion, errors, cancellation, parallel progress, mode restoration, and compatibility guards. They do not require a model or network access.
 
+To test compaction coordination with a local checkout of `pi-compact-coordinator`:
+
+```bash
+npm run test:compat -- ../pi-compact-coordinator/index.ts
+```
+
+This runs both extensions in both loading orders, covering successful compaction, failure recovery, cancellation, and intervening user input with simulated compaction results.
+
 The extension has no third-party runtime dependencies. It uses Node.js and Pi's public extension and terminal UI APIs.
 
 ## Compatibility
@@ -78,4 +87,5 @@ Validated against Pi `0.87.1`. Development checks require Node.js 22.6 or later.
 - Only changes presentation in the terminal UI. RPC, JSON, and print modes use the same delegated native tool execution without displaying the widget.
 - Third-party tools with other names keep their own renderers and participate in progress tracking. If another extension overrides `read`, `bash`, `edit`, or `write`, load it before pi-focus: Pi uses the first extension registration for each tool name.
 - Compact renderers are registered before Pi reconstructs history. Reloading or resuming a session restores historical tool rows according to the saved focus mode.
+- Compaction progress uses Pi's native lifecycle events. Preserving totals across coordinator continuations requires a coordinator version that emits `pi-compact-coordinator:pause` and `pi-compact-coordinator:resume`; update both extensions together. Neither extension requires the other to be installed.
 - Assistant messages, thinking blocks, images, and confirmation dialogs keep Pi's existing behavior. Use `Ctrl+T` to toggle thinking blocks separately.

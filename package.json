@@ -6,7 +6,11 @@
   "keywords": ["pi-package"],
   "files": ["index.ts", "README.md"],
   "pi": { "extensions": ["./index.ts"] },
-  "scripts": { "test": "node --experimental-strip-types test.ts", "check": "tsc --noEmit --target es2022 --module nodenext --moduleResolution nodenext --allowImportingTsExtensions --strict --skipLibCheck index.ts test.ts" },
+  "scripts": {
+    "test": "node --experimental-strip-types test.ts",
+    "test:compat": "node --experimental-strip-types compat.test.ts",
+    "check": "tsc --noEmit --target es2022 --module nodenext --moduleResolution nodenext --allowImportingTsExtensions --strict --skipLibCheck index.ts test.ts compat.test.ts"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/YukiKazahana/pi-focus.git"

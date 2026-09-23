@@ -27,6 +27,9 @@ export default function focusExtension(pi: ExtensionAPI) {
   let lastFailure = "";
   let lastFile = "";
   let outcome = "本轮结束";
+  let sessionContext: ExtensionContext | undefined;
+  let compactionPhase: string | undefined;
+  let resumeAfterCompaction = false;
   const running = new Map<string, { name: string; args: any }>();
 
   function paint(ctx: ExtensionContext) {
@@ -39,7 +42,7 @@ export default function focusExtension(pi: ExtensionAPI) {
       const active = [...running.values()];
       const status = active.length
         ? `执行中 ${active.length} 项：${active.slice(0, 2).map(t => `${t.name} ${targetOf(t.args)}`).join(" · ")}`
-        : phase;
+        : compactionPhase ?? phase;
       const rows = [theme.fg("muted", `专注 · ${status} · 已执行 ${completed} · 失败 ${failures}`)];
       if (lastFile) rows.push(theme.fg("muted", `最近修改：${lastFile}`));
       if (lastFailure) rows.push(theme.fg("error", `最近失败：${lastFailure}`));
@@ -124,7 +127,11 @@ export default function focusExtension(pi: ExtensionAPI) {
       createBashToolDefinition(ctx.cwd, { shellPath: settings.getShellPath(), commandPrefix: settings.getShellCommandPrefix() }),
       createEditToolDefinition(ctx.cwd), createWriteToolDefinition(ctx.cwd),
     ];
+    sessionContext = undefined;
+    compactionPhase = undefined;
+    resumeAfterCompaction = false;
     if (ctx.mode !== "tui") return;
+    sessionContext = ctx;
     enabled = true;
     for (const entry of ctx.sessionManager.getBranch()) {
       if (entry.type === "custom" && entry.customType === key) {
@@ -154,10 +161,45 @@ export default function focusExtension(pi: ExtensionAPI) {
     },
   });
 
+  pi.events.on("pi-compact-coordinator:pause", sessionId => {
+    if (!sessionContext || sessionId !== sessionContext.sessionManager.getSessionId()) return;
+    compactionPhase = "准备压缩";
+    paint(sessionContext);
+  });
+  pi.events.on("pi-compact-coordinator:resume", sessionId => {
+    if (!sessionContext || sessionId !== sessionContext.sessionManager.getSessionId()) return;
+    resumeAfterCompaction = true;
+    compactionPhase = "恢复执行";
+    paint(sessionContext);
+  });
+  pi.on("session_before_compact", (_event, ctx) => {
+    compactionPhase = "压缩中";
+    paint(ctx);
+  });
+  pi.on("session_compact", (_event, ctx) => {
+    compactionPhase = "压缩完成";
+    paint(ctx);
+  });
+  pi.on("session_compact_failed", (event, ctx) => {
+    resumeAfterCompaction = false;
+    compactionPhase = event.aborted ? "压缩已取消" : "压缩失败";
+    paint(ctx);
+  });
+  pi.on("input", event => {
+    if (event.source !== "extension" && !event.streamingBehavior) resumeAfterCompaction = false;
+  });
+  pi.on("session_tree", () => {
+    compactionPhase = undefined;
+    resumeAfterCompaction = false;
+  });
   pi.on("agent_start", (_event, ctx) => {
     running.clear();
-    completed = failures = 0;
-    lastFailure = lastFile = "";
+    if (!resumeAfterCompaction) {
+      completed = failures = 0;
+      lastFailure = lastFile = "";
+    }
+    resumeAfterCompaction = false;
+    compactionPhase = undefined;
     phase = "思考中";
     outcome = "本轮结束";
     paint(ctx);
@@ -188,6 +230,9 @@ export default function focusExtension(pi: ExtensionAPI) {
     paint(ctx);
   });
   pi.on("session_shutdown", (_event, ctx) => {
+    sessionContext = undefined;
+    compactionPhase = undefined;
+    resumeAfterCompaction = false;
     if (ctx.mode !== "tui") return;
     ctx.ui.setWidget(key, undefined);
     if (previousExpanded !== undefined) ctx.ui.setToolsExpanded(previousExpanded);
